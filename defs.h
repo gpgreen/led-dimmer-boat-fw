@@ -20,8 +20,8 @@
 
 #define RED_DRIVER_PIN 0
 #define RED_DRIVER_REG OCR0A
-#define BG_DRIVER_PIN 1
-#define BG_DRIVER_REG OCR0B
+#define GB_DRIVER_PIN 1
+#define GB_DRIVER_REG OCR0B
 #define POT_PIN 3
 #define RED_SEL_PIN 4
 

@@ -8,8 +8,8 @@ void gpio_setup(void)
   // setup the led driver pins, level lo
   // PB0 - red driver
   // PB1 - blue/green driver
-  DDRB |= _BV(RED_DRIVER_PIN) & _BV(BG_DRIVER_PIN);
-  PORTB &= ~(_BV(RED_DRIVER_PIN) & _BV(BG_DRIVER_PIN));
+  DDRB |= _BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN);
+  PORTB &= ~(_BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN));
 
   // setup the potentiometer input, PB3
   DDRB &= ~_BV(POT_PIN);

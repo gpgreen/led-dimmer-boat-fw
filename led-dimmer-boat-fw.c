@@ -13,11 +13,17 @@
  */
 
 #include "defs.h"
-#include <avr/io.h>
+#include <avr/interrupt.h>
 #include <util/delay.h>
 #include "gpio.h"
 #include <math.h>
 #include "globals.h"
+
+/*-----------------------------------------------------------------------*/
+
+/* static variables */
+uint8_t output_compare_red = 0;
+uint8_t output_compare_greenblue = 0;
 
 /*-----------------------------------------------------------------------*/
 
@@ -28,7 +34,7 @@ ioinit(void)
 
   // starting PWM drivers at level 0
   RED_DRIVER_REG = 0;
-  BG_DRIVER_REG = 0;
+  GB_DRIVER_REG = 0;
   // setup timer for Fast PWM
   TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM01) | _BV(WGM00);
   TCCR0B = _BV(CS00);
@@ -59,6 +65,7 @@ main(void)
   CLKPR = 0;
 
   ioinit();
+  sei();
 
   while(1)
     {
@@ -77,17 +84,29 @@ main(void)
       // set the duty cycle
       uint8_t duty_cycle = (uint8_t)val;
       if (red_selected) {
-        RED_DRIVER_REG = duty_cycle;
-        BG_DRIVER_REG = 0;
+        output_compare_red = duty_cycle;
+        output_compare_greenblue = 0;
       } else {
-        RED_DRIVER_REG = duty_cycle;
-        BG_DRIVER_REG = duty_cycle;
+        output_compare_red = duty_cycle;
+        output_compare_greenblue = duty_cycle;
       }
+      // set the overflow interrupt so OCR's can be changed
+      TIMSK0 |= _BV(TOIE0);
 
       // delay
       _delay_ms(10);
     }
   return 0;
+}
+
+/*-----------------------------------------------------------------------*/
+
+ISR(TIM0_OVF_vect)
+{
+  RED_DRIVER_REG = output_compare_red;
+  GB_DRIVER_REG = output_compare_greenblue;
+  // disable the interrupt
+  TIMSK0 &= ~_BV(TOIE0);
 }
 
 /*-----------------------------------------------------------------------*/
