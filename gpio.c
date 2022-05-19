@@ -5,19 +5,16 @@
 
 void gpio_setup(void)
 {
-  // setup the led driver pins, level lo
-  // PB0 - red driver
-  // PB1 - blue/green driver
-  DDRB |= _BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN);
-  PORTB &= ~(_BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN));
+    // setup the led driver pins, level lo
+    DDRB |= _BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN);
+    PORTB &= ~(_BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN));
 
-  // setup the potentiometer input, PB3
-  DDRB &= ~_BV(POT_PIN);
-
-  // setup the red select input, PB4
-  DDRB &= ~_BV(RED_SEL_PIN);
-
-  // setup pin 2 as input with pullup as it is floating
-  DDRB &= ~_BV(2);
-  PORTB |= _BV(2);
+#ifdef USE_PROTO
+    // set pullups on unused pins
+    PORTA |= _BV(0) | _BV(1) | _BV(2) | _BV(3) | _BV(5) | _BV(6) | _BV(7);
+    PORTB |= _BV(0) | _BV(2) | _BV(5) | _BV(6);
+#else
+    // setup pin 2 as input with pullup as it is floating
+    PORTB |= _BV(2);
+#endif
 }

@@ -1,19 +1,9 @@
 /*
- * Fuse bits for ATtiny13
- * Full swing oscillator, start up 14ck + 64ms, internal rc occ
- * clock prescaler divide by 8
- * watchdog timer always on
- * serial programming downloading enabled
- * self programming enabled
- * brown-out at 4.3V
- * Low=0x4a Hi=0xe9
- * avrdude settings:
- * -U lfuse:w:0x4a:m -U hfuse:w:0xe9:m
- * from http://www.engbedded.com/fusecalc/
  */
 
 #include "defs.h"
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
 #include <util/delay.h>
 #include "gpio.h"
 #include <math.h>
@@ -27,31 +17,68 @@ uint8_t output_compare_greenblue = 0;
 
 /*-----------------------------------------------------------------------*/
 
+uint8_t mcusr_mirror __attribute__ ((section (".noinit")));
+
+/*-----------------------------------------------------------------------*/
+// disable the watchdog during startup
+void get_mcusr(void) \
+    __attribute__((naked))                      \
+    __attribute__((section(".init3")));
+void get_mcusr(void)
+{
+    mcusr_mirror = MCUSR;
+    MCUSR = 0;
+    wdt_disable();
+}
+
+/*-----------------------------------------------------------------------*/
+
 void
 ioinit(void)
 {
-  gpio_setup();
+    gpio_setup();
 
-  // starting PWM drivers at level 0
-  RED_DRIVER_REG = 0;
-  GB_DRIVER_REG = 0;
-  // setup timer for Fast PWM
-  TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM01) | _BV(WGM00);
-  TCCR0B = _BV(CS00);
+#ifdef USE_PROTO
+    // starting PWM drivers at level 0
+    RED_DRIVER_REG = 0;
+    GB_DRIVER_REG = 0;
+    // setup timer for Fast PWM
+    TCCR1A = _BV(COM1A1) | _BV(COM1B1) | _BV(PWM1A) | _BV(PWM1B);
+    TCCR1B = _BV(CS10);
+    OCR1C = 255;
+#else
+    // starting PWM drivers at level 0
+    RED_DRIVER_REG = 0;
+    GB_DRIVER_REG = 0;
+    // setup timer for Fast PWM
+    TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM01) | _BV(WGM00);
+    TCCR0B = _BV(CS00);
+#endif
 
-  // setup adc
-  // voltage reference Vcc
-  // select ADC3 as input (PB3)
-  ADMUX = _BV(MUX1) | _BV(MUX0);
-  // enable adc, start converting, input clock to clk/128
-  ADCSRA |= _BV(ADEN) | _BV(ADSC) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
-  // disable digital input buffer for the analog input pin
-  DIDR0 |= _BV(ADC3D);
-  // loop until the conversion is complete, then start again to discard first value
-  while ((ADCSRA & _BV(ADSC)) == _BV(ADSC));
-  // start conversion again
-  ADCSRA |= _BV(ADSC);
-  _delay_ms(50);
+    // setup adc
+    // voltage reference Vcc
+    // select ADC3 as input
+    ADMUX = _BV(MUX1) | _BV(MUX0);
+    // enable adc, start converting, input clock to clk/128
+    _ADCSR |= _BV(ADEN) | _BV(ADSC) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
+#ifndef USE_PROTO
+    // disable digital input buffer for the analog input pin
+    DIDR0 |= _BV(ADC3D);
+#endif
+    // loop until the conversion is complete, then start again to discard first value
+    while ((_ADCSR & _BV(ADSC)) == _BV(ADSC));
+    // start conversion again
+    _ADCSR |= _BV(ADSC);
+
+    WDTCR |= _BV(WDCE) | _BV(WDE); // start timed sequence
+#ifdef USE_PROTO
+    // wdt prescalar change (.27s)
+    WDTCR = _BV(WDE) | _BV(WDP2);
+#else
+    // wdt prescalar change (.25s)
+    WDTCR = _BV(WDE) | _BV(WDP2) | _BV(WDP0);
+#endif
+    _delay_ms(50);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -59,54 +86,66 @@ ioinit(void)
 int
 main(void)
 {
-  // first set the clock prescaler change enable
-  CLKPR = _BV(CLKPCE);
-  // now set the clock prescaler to clk/1
-  CLKPR = 0;
+#ifndef USE_PROTO
+    // start timed sequence
+    CLKPR = _BV(CLKPCE);
+    // now set the clock prescaler to clk/1
+    CLKPR = 0;
+#endif
 
-  ioinit();
-  sei();
+    ioinit();
+    sei();
 
-  while(1)
+    while(1)
     {
-      // get the adc value
-      while ((ADCSRA & _BV(ADSC)) == _BV(ADSC));
-      uint16_t val = ADCL;
-      val += (ADCH << 8);
-      val *= 255;
-      val /= 1023;
-      // start the adc again
-      ADCSRA |= _BV(ADSC);
+        // reset the watchdog
+        wdt_reset();
 
-      // if the RED_SEL_PIN is high, red color is NOT selected
-      int red_selected = ((PINB & _BV(RED_SEL_PIN)) == _BV(RED_SEL_PIN)) ? 0 : 1;
+        // get the adc value
+        while ((_ADCSR & _BV(ADSC)) == _BV(ADSC));
+        uint16_t val = ADCL;
+        val += (ADCH << 8);
+        val *= 255;
+        val /= 1023;
+        // start the adc again
+        _ADCSR |= _BV(ADSC);
 
-      // set the duty cycle
-      uint8_t duty_cycle = (uint8_t)val;
-      if (red_selected) {
-        output_compare_red = duty_cycle;
-        output_compare_greenblue = 0;
-      } else {
-        output_compare_red = duty_cycle;
-        output_compare_greenblue = duty_cycle;
-      }
-      // set the overflow interrupt so OCR's can be changed
-      TIMSK0 |= _BV(TOIE0);
+        // if the RED_SEL_PIN is high, red color is NOT selected
+        int red_selected = ((PINB & _BV(RED_SEL_PIN)) == _BV(RED_SEL_PIN)) ? 0 : 1;
 
-      // delay
-      _delay_ms(10);
+        // set the duty cycle
+        uint8_t duty_cycle = (uint8_t)val;
+        if (red_selected) {
+            output_compare_red = duty_cycle;
+            output_compare_greenblue = 0;
+        } else {
+            output_compare_red = duty_cycle;
+            output_compare_greenblue = duty_cycle;
+        }
+#ifdef USE_PROTO
+        // in attiny26, the OCR registers are updated on OCR1C overflow, so interrupt not required
+        RED_DRIVER_REG = output_compare_red;
+        GB_DRIVER_REG = output_compare_greenblue;
+#else
+        // set the overflow interrupt so OCR's can be changed
+        TIMSK0 |= _BV(TOIE0);
+#endif
+        // delay
+        _delay_ms(10);
     }
-  return 0;
+    return 0;
 }
 
 /*-----------------------------------------------------------------------*/
+#ifndef USE_PROTO
 
 ISR(TIM0_OVF_vect)
 {
-  RED_DRIVER_REG = output_compare_red;
-  GB_DRIVER_REG = output_compare_greenblue;
-  // disable the interrupt
-  TIMSK0 &= ~_BV(TOIE0);
+    RED_DRIVER_REG = output_compare_red;
+    GB_DRIVER_REG = output_compare_greenblue;
+    // disable the interrupt
+    TIMSK0 &= ~_BV(TOIE0);
 }
 
+#endif
 /*-----------------------------------------------------------------------*/

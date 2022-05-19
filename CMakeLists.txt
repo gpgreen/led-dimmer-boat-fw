@@ -11,6 +11,8 @@
 
 cmake_minimum_required(VERSION 2.8)
 
+option(PROTO "build for proto board with attiny26" OFF)
+
 ### TOOLCHAIN SETUP AREA #################################################
 # Set any variables used in the toolchain prior project() call. In that
 # case they are already set and used.
@@ -23,13 +25,33 @@ set(AVR_UPLOADTOOL avrdude)
 set(AVR_PROGRAMMER usbtiny)
 set(AVR_UPLOADTOOL_PORT usb)
 # AVR and fuses needs to be set
-set(AVR_MCU attiny13a)
-set(AVRDUDE_MCU t13)
+# Fuse selections from https://engbedded.com/fusecalc/
+if (PROTO)
+  set(AVR_MCU attiny26)
+  set(AVRDUDE_MCU t26)
+  # Int RC Osc 8MHz; Start-up time: 6CK + 64ms; [CKSEL=0100 SUT=10]
+  # Serial programming downloading (SPI) enabled; [SPIEN=0]
+  # Brown out detection level at 4.0V; [BODLEVEL=0]
+  set(AVR_H_FUSE 0xf4)
+  set(AVR_L_FUSE 0xe4)
+else ()
+  set(AVR_MCU attiny13a)
+  set(AVRDUDE_MCU t13)
+  # Int RC Osc 9.6MHz; Start-up time: 14CK + 64ms; [CKSEL=10 SUT=10]
+  # divide clock by 8 internally [CKDIV8=0]
+  # watchdog timer always on [WDTON=0]
+  # Serial programming downloading (SPI) enabled; [SPIEN=0]
+  # Brown out detection level at 4.3V; [BODLEVEL=00]
+  set(AVR_H_FUSE 0xf9)
+  set(AVR_L_FUSE 0x4a)
+endif ()
 set(AVR_USE_E_FUSE off)
-set(AVR_H_FUSE 0xe9)
-set(AVR_L_FUSE 0x4a)
-set(AVR_USE_MIN_PRINTF off)
 ### END TOOLCHAIN SETUP AREA #############################################
+
+##########################################################################
+### linker options
+# don't use the printf library
+set(AVR_USE_MIN_PRINTF off)
 
 ##########################################################################
 # name your project
@@ -49,7 +71,7 @@ message(STATUS "Current use E fuse is set to: ${AVR_USE_E_FUSE}")
 message(STATUS "Current E_FUSE is set to: ${AVR_E_FUSE}")
 message(STATUS "Current H_FUSE is set to: ${AVR_H_FUSE}")
 message(STATUS "Current L_FUSE is set to: ${AVR_L_FUSE}")
-message(STATUS "Current link to printf_min is set to: ${AVR_USE_MIN_PRINTF}")
+message(STATUS "Linking to printf_min is set to: ${AVR_USE_MIN_PRINTF}")
 
 ##################################################################################
 # set build type, if not already set at cmake command line
@@ -61,7 +83,11 @@ endif(NOT CMAKE_BUILD_TYPE)
 ##################################################################################
 # needs to be defined for AVR toolchain
 ##################################################################################
-set(MCU_SPEED "9600000UL")
+if (PROTO)
+  set(MCU_SPEED "8000000UL")
+else ()
+  set(MCU_SPEED "9600000UL")
+endif ()
 
 ##################################################################################
 # some cmake cross-compile necessities
@@ -131,6 +157,13 @@ add_definitions("-funsigned-bitfields")
 add_definitions("-ffunction-sections")
 add_definitions("-c")
 add_definitions("-std=gnu99")
+
+if (PROTO)
+  add_definitions("-DUSE_PROTO")
+  message(STATUS "Targeted for proto board with attiny26")
+else ()
+  message(STATUS "Targeted for prod board with attiny13")
+endif()
 
 ##########################################################################
 # include search paths

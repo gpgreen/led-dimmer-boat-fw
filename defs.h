@@ -1,6 +1,6 @@
 /*
  * Define registers and pins
- * ATtiny13
+ * ATtiny13 or ATtiny26
  * led-dimmer-boat board
  */
 #ifndef DEFS_H_
@@ -18,11 +18,26 @@
 
 /* specific pins */
 
+#ifdef USE_PROTO
+
+#define RED_DRIVER_PIN 1
+#define RED_DRIVER_REG OCR1A
+#define GB_DRIVER_PIN 3
+#define GB_DRIVER_REG OCR1B
+
+#define _ADCSR ADCSR
+
+#else
+
 #define RED_DRIVER_PIN 0
 #define RED_DRIVER_REG OCR0A
 #define GB_DRIVER_PIN 1
 #define GB_DRIVER_REG OCR0B
-#define POT_PIN 3
+
+#define _ADCSR ADCSRA
+
+#endif
+
 #define RED_SEL_PIN 4
 
 /*-----------------------------------------------------------------------*/
