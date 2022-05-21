@@ -6,8 +6,8 @@
 void gpio_setup(void)
 {
     // setup the led driver pins, level lo
-    DDRB |= _BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN);
-    PORTB &= ~(_BV(RED_DRIVER_PIN) & _BV(GB_DRIVER_PIN));
+    DDRB |= _BV(RED_DRIVER_PIN) | _BV(GB_DRIVER_PIN);
+    PORTB &= ~(_BV(RED_DRIVER_PIN) | _BV(GB_DRIVER_PIN));
 
 #ifdef USE_PROTO
     // set pullups on unused pins

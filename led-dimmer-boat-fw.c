@@ -1,4 +1,6 @@
 /*
+ * led-dimmer-boat-fw.c
+ * main program for boat led dimmer
  */
 
 #include "defs.h"
@@ -14,9 +16,6 @@
 /* static variables */
 uint8_t output_compare_red = 0;
 uint8_t output_compare_greenblue = 0;
-
-/*-----------------------------------------------------------------------*/
-
 uint8_t mcusr_mirror __attribute__ ((section (".noinit")));
 
 /*-----------------------------------------------------------------------*/
@@ -38,38 +37,37 @@ ioinit(void)
 {
     gpio_setup();
 
-#ifdef USE_PROTO
     // starting PWM drivers at level 0
     RED_DRIVER_REG = 0;
     GB_DRIVER_REG = 0;
+#ifdef USE_PROTO
     // setup timer for Fast PWM
     TCCR1A = _BV(COM1A1) | _BV(COM1B1) | _BV(PWM1A) | _BV(PWM1B);
     TCCR1B = _BV(CS10);
     OCR1C = 255;
 #else
-    // starting PWM drivers at level 0
-    RED_DRIVER_REG = 0;
-    GB_DRIVER_REG = 0;
-    // setup timer for Fast PWM
+    // setup timer for Phase correct PWM
     TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM01) | _BV(WGM00);
-    TCCR0B = _BV(CS00);
+    // clock divided by 8
+    TCCR0B = _BV(CS01);
 #endif
 
     // setup adc
     // voltage reference Vcc
     // select ADC3 as input
     ADMUX = _BV(MUX1) | _BV(MUX0);
-    // enable adc, start converting, input clock to clk/128
-    _ADCSR |= _BV(ADEN) | _BV(ADSC) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
 #ifndef USE_PROTO
     // disable digital input buffer for the analog input pin
     DIDR0 |= _BV(ADC3D);
 #endif
+    // enable adc, start converting, input clock to clk/128
+    _ADCSR |= _BV(ADEN) | _BV(ADSC) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
     // loop until the conversion is complete, then start again to discard first value
     while ((_ADCSR & _BV(ADSC)) == _BV(ADSC));
     // start conversion again
     _ADCSR |= _BV(ADSC);
 
+    // watchdog setup
     WDTCR |= _BV(WDCE) | _BV(WDE); // start timed sequence
 #ifdef USE_PROTO
     // wdt prescalar change (.27s)
@@ -78,6 +76,8 @@ ioinit(void)
     // wdt prescalar change (.25s)
     WDTCR = _BV(WDE) | _BV(WDP2) | _BV(WDP0);
 #endif
+
+    // delay for a while
     _delay_ms(50);
 }
 
@@ -105,8 +105,12 @@ main(void)
         while ((_ADCSR & _BV(ADSC)) == _BV(ADSC));
         uint16_t val = ADCL;
         val += (ADCH << 8);
-        val *= 255;
-        val /= 1023;
+        // divide by 4
+        val >>= 2;
+        if (val > 255)
+            val = 255;
+        if (val < 10)
+            val = 10;
         // start the adc again
         _ADCSR |= _BV(ADSC);
 
@@ -130,6 +134,7 @@ main(void)
         // set the overflow interrupt so OCR's can be changed
         TIMSK0 |= _BV(TOIE0);
 #endif
+
         // delay
         _delay_ms(10);
     }
