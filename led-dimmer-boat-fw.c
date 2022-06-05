@@ -105,11 +105,11 @@ main(void)
         while ((_ADCSR & _BV(ADSC)) == _BV(ADSC));
         uint16_t val = ADCL;
         val += (ADCH << 8);
-        // divide by 4
+        // turn it in to a duty cycle, divide by 4, and constrain to uint8_t
         val >>= 2;
         if (val > 255)
             val = 255;
-        if (val < 10)
+        else if (val < 10)
             val = 10;
         // start the adc again
         _ADCSR |= _BV(ADSC);
